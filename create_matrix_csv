@@ -1,0 +1,72 @@
+#!/usr/bin/env ruby
+
+# Script to create CSV with info from provided ST
+
+require 'rubygems'
+
+require 'yaml'
+require 'right_api_client'
+
+stid = ARGV[0] ? ARGV[0] : '328222001'
+
+clouds_skip = [
+  'Azure East Asia',
+  'Azure West Europe',
+  'Azure Southeast Asia',
+  'Azure North Europe',
+  'Azure East US',
+  'AWS ap-northeast-1',
+  'AWS ap-southeast-1',
+  'EC2 us-west-1',
+  'EC2 sa-east-1',
+  'EC2 ap-southeast-2',
+  'EC2 us-east-1',
+  'EC2 eu-west-1',
+  'Rackspace Open Cloud - Dallas',
+  'Rackspace Open Cloud - Chicago',
+  'Rackspace Open Cloud - Sydney',
+  'Rackspace Open Cloud - London',
+  'Rackspace Open Cloud - Hong Kong'
+  ]
+
+raise "must provide ST ID"  unless stid
+
+clouds = Hash.new
+
+@client = RightApi::Client.new(YAML.load_file(File.expand_path('~/.right_api_client/login.yml', __FILE__)))
+
+st_href = @client.server_templates.index(:id => stid).href
+
+mci_payload = @client.server_template_multi_cloud_images.index(:filter => ["server_template_href==#{st_href}"])
+
+mci_payload.each do |mci|
+  mci_name = mci.show.multi_cloud_image.show.name
+
+  mci.show.multi_cloud_image.show.settings.index.each do |image|
+    cloud_name = image.cloud.show.name
+
+    if clouds_skip.include?(cloud_name)
+      puts "skipping #{cloud_name} cloud"
+      next
+    end
+
+    puts "#{mci_name} -> #{cloud_name}"
+    clouds[cloud_name] = Array.new
+    clouds[cloud_name].push(mci_name)
+  end
+end
+
+csv_array = Array.new
+
+clouds.each do |cloud, mci_names|
+  mci_names.each do |mci_name|
+    print '.'
+    csv_array.push("\"#{cloud}\n\n\nTimeout:3600\nImage-regex:#{mci_name}$\nUDD:volumes\"")
+  end
+end
+print "\n"
+
+output_file = "/tmp/cloud_tests_#{$$}.csv"
+File.open(output_file, 'w') { |file| file.write(csv_array.join(',')) }
+
+puts "OUTPUT FILE: #{output_file}"
