@@ -7,7 +7,7 @@ require 'rubygems'
 require 'yaml'
 require 'right_api_client'
 
-stid = ARGV[0] ? ARGV[0] : '328222001'
+stid = ARGV[0] || '328222001'
 
 clouds_skip = [
   'Azure East Asia',
