@@ -1,0 +1,43 @@
+#!/usr/bin/env ruby
+
+require 'rubygems'
+require 'right_api_objects'
+require 'yaml'
+
+auth_info = {
+  account_id: ENV['account_id'],
+  refresh_token: ENV['refresh_token'],
+  api_url: 'https://us-3.rightscale.com',
+  api_version: 1.5
+}
+server_name = 'RightLink 10.4.0 Linux Base lopaka testing v1'
+rightscript_name = 'RightLink10 Install Custom Monitoring Tester Linux Sine wave'
+
+@client = RightApiObjects::Client.new(auth_info)
+puts "logged-in to the API, use the '@client' variable to use the client"
+
+server = @client.server(name: server_name)
+server.next_instance.multi_update_inputs(MONITORING_METHOD: 'text:rightlink')
+puts 'Launching server'
+server.launch_and_wait_for_operational_state
+
+instance = server.current_instance
+
+puts 'running script to set sine wave monitoring'
+wave_script = @client.right_script(name: rightscript_name)
+wave_script_task = instance.run_executable(right_script: wave_script)
+wave_script_task.wait_for_completed_summary
+
+metric = instance.monitoring_metric(plugin: 'wave', view: 'gauge-sine')
+metric.data(start: 60, end: 0).variables_data
+
+time_start = Time.now
+while metric.data(start: 60, end: 0).variables_data[0]['points'].reject(&:nan?).empty?
+  puts "NO DATA YET - #{Time.now - time_start} seconds lapsed"
+  sleep 5
+end
+time_end = Time.now
+
+total_time = time_end - time_start
+
+puts "Took #{total_time} seconds for monitoring data to return via API (start = #{time_start}  end = #{time_end})"
